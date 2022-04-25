@@ -8,9 +8,10 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
  * Interfaces SuperFarm's Super1155 contract
- * See example contract: https://etherscan.io/address/0x71B11Ac923C967CD5998F23F6dae0d779A6ac8Af#code
+ * See example contracts: https://etherscan.io/address/0x71B11Ac923C967CD5998F23F6dae0d779A6ac8Af#code,
+ * https://etherscan.io/address/0xc7b9D8483FD01C379a4141B2Ee7c39442172b259#code
  *
- * @notice To stake a token, a user must setApprovalForAll() using this contract's address for safeBatchTransfer() to work correctly
+ * @notice To stake tokens an account must setApprovalForAll() using the address of this contract in the above contracts
  */
 interface Super1155 {
   function safeBatchTransferFrom(
@@ -44,28 +45,37 @@ interface Super1155 {
  * @title A staking contract for Super1155 tokens.
  * @author DegenDeveloper.eth
  *
- * March 22, 2022
+ * April 25, 2022
  *
  * This contract allows users to stake their tokens to earn emission tokens.
  *
- * The contract is only capable of transferring tokens to their original stakers.
+ * This contract is only capable of transferring tokens to their original stakers.
+ *
+ * Accounts always have the ability to unstake their tokens no matter the contract state.
  *
  * The contract owner has the following permissions:
- * - the ability to allow/unallow new stakes
- * - the ability to blacklist/unblacklist an address; not allowing them to add new stakes
- * - the ability to set the next emission rate
- *      - past emRates are stored in the contract to accurately calculate emissions
- * - the ability to pause emissions (stop counting until a new emRate is set)
+ *
+ * - Open/close staking; enabling/disabling the addition of new stakes
+ * - Blacklist an account; disabling the addition of new stakes for a specific address
+ * - Pause emissions; stops the counting of emission tokens
+ * - Set new emission rates; sets a new rate for earning emission tokens
+ *    - if emissions are paused this unpauses them
+ *    - historic emission rates (emRates) are stored in the contract to accurately calculate emissions
  *
  * --------( In case of security breach )---------
  *
- * If there is a security breach or the contract owner wishes to terminate the grill,
- * they must call toggleBailout() before any manual unstaking can take place.
+ * Accounts will always have the ability to unstake their tokens, no matter the state of the contract; however,
  *
- * To avoid the contract owner removing any stakes before the grill is terminated, toggleBailout is only callable once
+ * If there is a security breach or the team wishes to terminate the grill, they have the ability to permanently close staking,
+ * sending back all tokens to their original stakers.
  *
- * If bailout occurs, bailoutAllStakes() will unstake all tokens, sending them back to their stakers. If there are gas limits
- * for transfering back all stakes at once, there is a bailoutSingleStake(_tokenId) to manually send back each stake
+ * The contract owner must call toggleBailout() before they force unstake any tokens.
+ *
+ * ToggleBailout() is only callable once
+ *
+ * Once toggleBailout() has been called, bailoutAllStakes() becomes callable. This function will unstake all tokens and send them back to their original stakers.
+ * If there are gas limits sending back all tokens in a single transaction, the function bailoutSingleStake(_tokenId) also becomes callable,
+ * allowing each tokenId to be unstaked manually
  */
 contract Grill is Ownable, ERC1155Holder {
   /// used for variables that start at 0 and only increment/decrement by 1 at a time
@@ -101,14 +111,14 @@ contract Grill is Ownable, ERC1155Holder {
   /// a mapping from each emChange to its associated emission details
   mapping(uint256 => Emission) private emissions;
 
-  /// a mapping from each address to their emission claims from removed stakes
+  /// a mapping from each address to their emission claims earned from their removed stakes
   mapping(address => uint256) private unstakedClaims;
 
   /// a counter for the number of active stakes
   Counters.Counter private allStakesCount;
 
   /// an indexed mapping for all tokenIds staked currently
-  mapping(uint256 => uint256) private allStakes; // record of tokenIds currently staked
+  mapping(uint256 => uint256) private allStakes;
 
   /**
    * This struct stores information about staked tokens. They are stored
@@ -122,6 +132,7 @@ contract Grill is Ownable, ERC1155Holder {
     address staker;
     uint256 timestamp;
   }
+
   /**
    * This struct stores information about emissions. They are stored in
    * the 'emissions' mapping by emChange
@@ -145,7 +156,7 @@ contract Grill is Ownable, ERC1155Holder {
     emissions[emChanges.current()] = Emission(_seconds, block.timestamp);
   }
 
-  /// ============ OWNER ============ ///
+  /// ============ OWNER FUNCTIONS ============ ///
 
   /**
    * For allowing/unallowing the addition of new stakes
@@ -167,7 +178,7 @@ contract Grill is Ownable, ERC1155Holder {
   }
 
   /**
-   * Stops emissions counting
+   * Stops the counting of emission tokens
    * @notice No tokens can be earned with an emission rate this long
    * @notice To continue emissions counting, the owner must set a new emission rate
    */
@@ -203,27 +214,27 @@ contract Grill is Ownable, ERC1155Holder {
   function bailoutAllStakes() external onlyOwner {
     require(BAILED_OUT, "GRILL: toggleBailout() must be called first");
 
-    /// @notice copies current number of stakes before bailout ///
+    /// @dev copies current number of stakes before bailout ///
     uint256 _totalCount = allStakesCount.current();
     for (uint256 i = 1; i <= _totalCount; ++i) {
-      /// @notice gets token and staker for last token staked ///
+      /// @dev gets token and staker for last token staked ///
       uint256 _lastTokenId = allStakes[allStakesCount.current()];
       address _staker = stakes[_lastTokenId].staker;
 
-      /// @notice transferrs _lastTokenId from the contract to associated _staker ///
+      /// @dev transferrs _lastTokenId from the contract to associated _staker ///
       Parent.safeTransferFrom(address(this), _staker, _lastTokenId, 1, "0x0");
 
-      /// @notice decrements & resets state data ///
+      /// @dev sets state changes ///
       uint256[] memory _singleArray = _makeOnesArray(1);
-      _singleArray[0] = _lastTokenId;
+      _singleArray[0] = _lastTokenId; // _removeStakes() requires an array of tokenIds
       _removeStakes(_staker, _singleArray);
     }
   }
 
   /**
-   * Sends back all _tokenId to its original staker
+   * Sends back _tokenId to its original staker
    * @notice toggleBailout() must be called
-   * @notice This function is here in case bailoutAllStakes() has gas restrictions
+   * @notice This function is here in case bailoutAllStakes() has gas limitations
    */
   function bailoutSingleStake(uint256 _tokenId) external onlyOwner {
     require(BAILED_OUT, "GRILL: toggleBailout() must be called first");
@@ -236,13 +247,13 @@ contract Grill is Ownable, ERC1155Holder {
       "0x0"
     );
 
-    /// @dev set state changes
+    /// @dev sets state changes ///
     uint256[] memory _singleArray = _makeOnesArray(1);
     _singleArray[0] = _tokenId;
     _removeStakes(stakes[_tokenId].staker, _singleArray);
   }
 
-  /// ============ PUBLIC ============ ///
+  /// ============ PUBLIC FUNCTIONS ============ ///
 
   /**
    * Transfer tokens from caller to contract and begins emissions counting
@@ -306,7 +317,7 @@ contract Grill is Ownable, ERC1155Holder {
       "GRILL: caller is unstaking too many tokens"
     );
 
-    /// @dev transfers token batch from contract to caller
+    /// @dev transfers token batch from contract to caller ///
     Parent.safeBatchTransferFrom(
       address(this),
       msg.sender,
@@ -315,11 +326,11 @@ contract Grill is Ownable, ERC1155Holder {
       "0x0"
     );
 
-    /// @dev sets contract state
+    /// @dev sets contract state ///
     _removeStakes(msg.sender, _tokenIds);
   }
 
-  /// ============ PRIVATE/HELPER ============ ///
+  /// ============ PRIVATE/HELPER FUNCTIONS ============ ///
 
   /**
    * Verifies if an address can stake a batch of tokens
@@ -401,14 +412,14 @@ contract Grill is Ownable, ERC1155Holder {
       uint256 _tokenId = _tokenIds[i];
       unstakedClaims[_staker] += _countEmissions(_tokenId);
 
-      /// @dev resets Stake object in `stakes` mapping
+      /// @dev resets Stake object in `stakes` mapping ///
       delete stakes[_tokenId];
 
       /// last index of mappings
       uint256 _t = addrStakesCount[_staker].current();
       uint256 _t1 = allStakesCount.current();
 
-      /// @dev finds _tokenId in mappings, swaps it with last index
+      /// @dev finds _tokenId in mappings, swaps it with last index ///
       for (uint256 j = 1; j < _t; ++j) {
         if (addrStakesIds[_staker][j] == _tokenId) {
           addrStakesIds[_staker][j] = addrStakesIds[_staker][_t];
@@ -453,7 +464,7 @@ contract Grill is Ownable, ERC1155Holder {
   function _countEmissions(uint256 _tokenId) private view returns (uint256 _c) {
     require(stakes[_tokenId].status, "GRILL: token is not currently staked");
 
-    /// @dev finds the first emission rate _tokenId was staked for
+    /// @dev finds the first emission rate _tokenId was staked for ///
     uint256 minT;
     uint256 timeStake = stakes[_tokenId].timestamp;
     for (uint256 i = 1; i <= emChanges.current(); ++i) {
@@ -461,7 +472,7 @@ contract Grill is Ownable, ERC1155Holder {
         minT += 1;
       }
     }
-    /// @dev count all emissions earned starting from minT -> now
+    /// @dev counts all emissions earned starting from minT -> now
     for (uint256 i = minT; i <= emChanges.current(); ++i) {
       uint256 tSmall = emissions[i].timestamp;
       uint256 tBig = emissions[i + 1].timestamp;
@@ -476,7 +487,7 @@ contract Grill is Ownable, ERC1155Holder {
   }
 
   /**
-   * Helper function for creating _amounts array for Parent.safeBatchTransferFrom()
+   * Helper function for creating an array of all 1's
    * @param _n The size of the array
    * @return _ones An array of size _n with a value of 1 at each index
    */
@@ -509,7 +520,7 @@ contract Grill is Ownable, ERC1155Holder {
   }
 
   /**
-   * @return _b If the contract is allowing new stakes
+   * @return _b If the contract is allowing new stakes to be added
    */
   function isStakingActive() external view returns (bool _b) {
     _b = STAKING_ACTIVE;
@@ -524,7 +535,7 @@ contract Grill is Ownable, ERC1155Holder {
 
   /**
    * @param _addr The address to lookup
-   * @return _b blacklist status
+   * @return _b Blacklist status
    */
   function isBlacklisted(address _addr) external view returns (bool _b) {
     _b = blacklist[_addr];
