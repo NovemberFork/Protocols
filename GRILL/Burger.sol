@@ -94,7 +94,7 @@ contract Burger is ERC1155, Ownable {
     _mintBatch(_addr, _ids, _amounts, "0x0");
   }
 
-  /// ============ PUBLIC ============ ///
+  /// ============ PUBLIC FUNCTIONS ============ ///
 
   /**
    * Mint tokens to caller
