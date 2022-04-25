@@ -9,3 +9,6 @@
 # Burgers
 - Burger.sol is an erc-1155 contract
 - Burger claims are accumulated while tokens are staked in the Grill
+
+# Audit
+- This contract is currently being audited by Peckshield Inc: https://peckshield.com/
