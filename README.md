@@ -1,3 +1,3 @@
 # Protocols
 
-- Here are all protocols from NovemberFork
+- Here are all published protocols from NovemberFork and their audits if available
