@@ -16,5 +16,5 @@
 - When leaving a rabbit in a hole the caller will burn 1 RBIT
 - A rabbit's comment can be any number of character long
   - The front end application will convert a user's string into a felt* to store
-- * Later there will be a fee for digging a hole
-  - * This will reduce hole digging spam by introducing a pay wall
+- Later there will be a fee for digging a hole
+  - This will reduce hole digging spam by introducing a pay wall
