@@ -2,20 +2,41 @@
 
 ## Idea:
 - Start permanent discussion threads for any topic
-- Leave permanent messages in these discussion threads
+- Store comments in these discussion threads
 
 ## Terminology
 - These discussion threads are called `holes`
 - The messages in them are called `rabbits`
 
+## A Hole
+A hole is made of 4 members. Its `digger`, `title`, `timestamp`, and `rabbit_count`
+- The `digger` is the account that started the discussion thread
+- The `title` is a felt representation for the title
+  - Each title must be < 32 characters
+- The `timestamp` is the block timestamp when the hole was dug
+- The `rabbit count` is the number of rabbits/comments within the hole
+  - This is used for indexing specific rabbits within a specific hole 
+
+## A Rabbit
+A rabbit is made of 5 members. Its `leaver`, `timestamp`, `hole_index`, `comment_stack_start`, and `comment_stack_len`
+- The `leaver` is the account that left the rabbit
+- The `timestamp` is the block timestamp when the rabbit was left
+- The `hole_index` is the index for the hole this rabbit belongs to
+- The `comment_stack_start` and `comment_stack_len` are used to retrieve the rabbit's comment (see below)
+
+## The Comment Stack
+Because a rabbit's comment can be any length of characters, a comment is divided into its comment chunks (each a `felt`). The `comment_stack_start` for a rabbit tells where on the comment_stack the specific rabbit's comment starts, and the `comment_stack_len` tells how many comment chunks this rabbit's comment fills
+
 ## Technicals
-- A hole is represented by its title (in the form of a felt)
-  - Meaning each title can only be < 32 characters
-  - The frontend application will handle string -> felt conversion
+- The frontend application will handle `str` -> `felt` & `str` -> `felt *` conversions
 - An account will be minted RBIT when they dig a hole
 - Rabbits can only be left in already dug holes
 - When leaving a rabbit in a hole the caller will burn 1 RBIT
-- A rabbit's comment can be any number of character long
-  - The front end application will convert a user's string into a felt* for storing
+
+## Future
 - Later there will be a fee for digging a hole
   - This will reduce hole digging spam by introducing a pay wall
+
+## Currently
+- Testing the contract
+- Building the frontend 
