@@ -1,28 +1,33 @@
 %lang starknet
-from starkware.cairo.common.alloc import alloc
-from starkware.cairo.common.math import assert_lt, assert_not_zero, assert_nn
 
-from starkware.cairo.common.cairo_builtins import HashBuiltin
+from starkware.cairo.common.alloc import alloc
 from starkware.cairo.common.uint256 import Uint256
+from starkware.cairo.common.cairo_builtins import HashBuiltin
+from starkware.cairo.common.math import (
+    assert_lt, 
+    assert_le, 
+    assert_not_zero, 
+    assert_nn,
+)
 from starkware.starknet.common.syscalls import (
     get_caller_address,
-    get_block_timestamp
+    get_block_timestamp,
 )
-from contracts.token.ERC20.ERC20_base import (
+from openzeppelin.access.ownable import (
+    Ownable_initializer,
+    Ownable_only_owner,
+    Ownable_get_owner,
+    Ownable_transfer_ownership,
+)
+from openzeppelin.token.erc20.library import (
     ERC20_name,
     ERC20_symbol,
     ERC20_totalSupply,
     ERC20_decimals,
     ERC20_balanceOf,
-    ERC20_allowance,
     ERC20_mint,
     ERC20_burn,
     ERC20_initializer,
-    ERC20_approve,
-    ERC20_increaseAllowance,
-    ERC20_decreaseAllowance,
-    ERC20_transfer,
-    ERC20_transferFrom
 )
 
 #########################################################################################
@@ -30,16 +35,17 @@ from contracts.token.ERC20.ERC20_base import (
 # May 3, 2022
 #
 # This contract allows accounts to start permanent discussion threads for any topic.
+# 
 # Accounts can leave comments in existing discussion threads.
 # 
 # These discussion threads are called holes and the comments inside are called rabbits.
 #
 # To dig a hole, an account must pay the DIG_FEE. In exchange for digging a hole,
-# the account will be minted DIG_REWARD number of rabbits (RBIT).
+# the account will be minted `dig_reward` number of RBIT.
 #
 # To leave a rabbit in a hole, an account will burn 1 RBIT.
 #
-# This contract also stores the holes dug & rabbits left by each account.
+# This contract stores indexes for each hole, rabbit, and account for easier frontend parsing
 ######################################################################
 
 ###########
@@ -59,21 +65,20 @@ struct Hole:
     member timestamp: felt
     member rabbit_count: felt
 end
-
 ############################################################################################
 # This struct stores data members for each rabbit left
 # @param leaver The account that left the rabbit
-# @param comment_stack_start The index the rabbit's comment starts at in the comment_stack
-# @param comment_stack_len The number of comment chunks (felts) the rabbit's comment fills
 # @param timestamp The time the rabbit was left
 # @param hole_index The index for the hole the rabbit belongs in
+# @param comment_stack_start The index the comment starts at in the comment_stack
+# @param comment_stack_len The number of comment indexes (felts) the comment fills
 ###############################################################
 struct Rabbit:
     member leaver: felt
-    member comment_stack_start: felt
-    member comment_stack_len: felt
     member timestamp: felt
     member hole_index: felt
+    member comment_stack_start: felt
+    member comment_stack_len: felt
 end
 
 ######################
@@ -88,13 +93,13 @@ end
 @storage_var
 func current_hole_index() -> (index: felt):
 end
-# all holes by index
-@storage_var
-func hole_storage(index: felt) -> (hole: Hole):
-end
 # current number of rabbits
 @storage_var
 func current_rabbit_index() -> (index: felt):
+end
+# all holes by index
+@storage_var
+func hole_storage(index: felt) -> (hole: Hole):
 end
 # all rabbits by index
 @storage_var
@@ -139,17 +144,29 @@ end
 @storage_var
 func account_holes_count(account: felt) -> (count: felt):
 end
-# all holes from an account by index
-@storage_var
-func account_holes(account: felt, index: felt) -> (hole_index: felt):
-end
 # number of rabbits by each account
 @storage_var
 func account_rabbits_count(account: felt) -> (count: felt):
 end
+# all holes from an account by index
+@storage_var
+func account_holes(account: felt, index: felt) -> (hole_index: felt):
+end
 # all rabbits from an account by index
 @storage_var
 func account_rabbits(account: felt, index: felt) -> (rabbit_index: felt):
+end
+# number of accounts that have dug holes
+@storage_var 
+func number_of_accounts() -> (count: felt):
+end
+# each account by index
+@storage_var
+func accounts_by_index(index: felt) -> (account: felt):
+end
+# lookup for an account's index
+@storage_var
+func account_indexes(account: felt) -> (index: felt):
 end
 
 ##############
@@ -164,16 +181,207 @@ func constructor{
     }(
         name: felt,
         symbol: felt,
-        initial_supply: Uint256,
-        recipient: felt
+        owner: felt
     ):
-    ERC20_initializer(name, symbol, initial_supply, recipient)
-    # change later
-    let fee: felt = 1000000000
-    let reward: felt = 25
-    dig_fee_storage.write(fee)
-    dig_reward_storage.write(reward)
+    # mint owner initial supply of tokens (1000 RBIT)
+    let initial_supply: Uint256 = Uint256(1000 * 1000000000000000000, 0)
+    ERC20_mint(owner, initial_supply)
+    # sets collection name, symbol and decimals
+    ERC20_initializer(name, symbol, 18)
+    # sets contract owner
+    Ownable_initializer(owner)
+    # set the fee (in wei) for digging hole (Not yet implemented)
+    dig_fee_storage.write(10 * 1000000000000000000)
+    # set number of RBIT minted for digging hole (25 RBIT)
+    dig_reward_storage.write(25 * 1000000000000000000)
+    
     return ()
+end
+
+##################
+# Owner Functions
+################
+
+# add all owner functions here
+# set new owner
+# change dig fee
+# change dig reward
+
+# Sets the fee for digging a hole
+# @param amount A felt for the amount of wei to charge per dig
+@external
+func setDigFee{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(amount: felt):
+    Ownable_only_owner()
+    dig_fee_storage.write(amount)
+    return()
+end
+# Sets the number of RBIT minted to an account for digging a hole
+# @param amount The number of RBIT to mint in wei
+@external
+func setDigReward{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(amount: felt):
+    Ownable_only_owner()
+    dig_reward_storage.write(amount)
+    return()
+end
+# Sets a new contract owner
+# @param new_owner The address to set as contract owner
+@external
+func transferOwnership{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(new_owner: felt):
+    Ownable_only_owner()
+    Ownable_transfer_ownership(new_owner)
+    return()
+end
+
+###########
+# Internal
+#########
+
+# recursive function to make the comment for a specific rabbit
+func _comment_creator{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(start: felt, len: felt, comment: felt*):
+    if len == 0:
+        return ()
+    end
+    let (c) = comment_stack.read(start+len)
+    assert [comment] = c
+    _comment_creator(start=start, len=len - 1, comment=comment + 1)
+    return ()
+end
+# recursive function to set the comment stack for a rabbit's comment
+func _leave_rabbit{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(comment_len: felt, comment: felt*):
+    if comment_len == 0:
+        return()
+    end
+    let displacement: felt = comment_stack_len.read()
+    let index = displacement + comment_len
+    comment_stack.write(index, [comment])
+    _leave_rabbit(comment_len - 1, comment + 1)
+    return()
+end
+
+#########
+# Public
+#######
+
+# Use this function to leave a rabbit in an existing hole
+# @notice Account will burn 1 RBIT 
+# @param hole_index The hole to leave the rabbit in
+# @param comment_len The length of the comment array
+# @param comment An array of felts representing the rabbit's comment
+@external
+func leave_rabbit{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(hole_index: felt, comment_len: felt, comment: felt*):
+    alloc_locals
+    let current_hole_id: felt = current_hole_index.read()
+    let hole_diff: felt = current_hole_id - hole_index
+    # require hole not dug yet
+    with_attr error_message(
+            "Rabbitholes: Hole not dug yet"):
+        assert_le(hole_index, current_hole_id)
+    end
+    with_attr error_message(
+            "Rabbitholes: Invalid hole index"):
+        assert_not_zero(hole_index)
+    end
+    # sets rabbit comment on comment stack
+    _leave_rabbit(comment_len, comment)
+    let account: felt = get_caller_address()
+    let id: felt = current_rabbit_index.read()
+    let timestamp: felt = get_block_timestamp()
+    let current_hole: Hole = hole_storage.read(hole_index)
+    let current_comment_index: felt = comment_stack_len.read()
+    let current_rabbits_in_hole: felt = current_hole.rabbit_count    
+    let current_rabbits_from_account: felt = account_rabbits_count.read(account)
+    # create and store new rabbit struct
+    rabbit_storage.write(id+1, Rabbit(leaver=account, comment_stack_start=current_comment_index, comment_stack_len=comment_len, timestamp=timestamp, hole_index=hole_index))
+    # increment rabbits in hole and store updated count
+    hole_storage.write(hole_index, Hole(digger=current_hole.digger, title=current_hole.title, timestamp=current_hole.timestamp, rabbit_count=current_rabbits_in_hole + 1))
+    # set rabbit in hole
+    rabbit_in_hole_storage.write(hole_index, current_rabbits_in_hole + 1, id + 1)
+    # set account's rabbit
+    account_rabbits.write(account, current_rabbits_from_account + 1, id + 1)
+    # increment number of rabbits from account
+    account_rabbits_count.write(account, current_rabbits_from_account + 1)
+    # increment comment stack len by comment_len
+    comment_stack_len.write(current_comment_index + comment_len)
+    # increment number of rabbits in contract
+    current_rabbit_index.write(id + 1)
+    # burn 1 rbit
+    let burn_amount: Uint256 = Uint256(1 * 1000000000000000000, 0)
+    ERC20_burn(account, burn_amount)
+    return()
+end
+# Use this function to dig a hole
+# @notice Account will pay the dig fee
+# @notice Account will be minted dig reward number of RBIT
+# @param title The felt representation for a hole's title
+@external
+func dig_hole{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(title: felt):
+    alloc_locals
+    ## NEED TO CHARGE DIG FEE
+    let hole_index_lookup: felt = hole_indexes.read(title)
+    # require hole not dug yet
+    with_attr error_message(
+            "Rabbitholes: Hole already dug"):
+        assert hole_index_lookup = 0
+    end
+    let account: felt = get_caller_address()
+    let timestamp: felt = get_block_timestamp()
+    let id: felt = current_hole_index.read()
+    let current_holes_from_account: felt = account_holes_count.read(account)
+    # create and store new hole struct
+    hole_storage.write(id+1, Hole(digger=account, title=title, timestamp=timestamp, rabbit_count=0))
+    # set index for hole title
+    hole_indexes.write(title, id + 1)
+    # set account's holes
+    account_holes.write(account, current_holes_from_account + 1, id + 1)
+    # increment number of holes from account
+    account_holes_count.write(account, current_holes_from_account + 1)
+    # increment number of holes in contract
+    current_hole_index.write(id + 1)
+    # mint RBIT
+    let reward: felt = dig_reward_storage.read()
+    let amount: Uint256 = Uint256(reward, 0)
+    ERC20_mint(account, amount)
+    # check account index
+    let account_index: felt = account_indexes.read(account)
+    if account_index == 0:
+        let current_account_count: felt = number_of_accounts.read()
+        # set account index
+        accounts_by_index.write(current_account_count + 1, account)
+        # set account's index
+        account_indexes.write(account, current_account_count + 1)
+        # increment account total
+        number_of_accounts.write(current_account_count + 1)
+        return()
+    end
+    return()
 end
 
 ############
@@ -299,6 +507,66 @@ func rabbits_from_account_by_index{
     let rabbit_index: felt = account_rabbits.read(account, index)
     return (rabbit_index)
 end
+# returns the index for an account
+@view
+func account_index{
+        syscall_ptr: felt*, 
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(account: felt) -> (index: felt):
+    let index: felt = account_indexes.read(account)
+    return(index)
+end
+# returns an account by index
+@view
+func account_by_index{
+        syscall_ptr: felt*, 
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }(index: felt) -> (account: felt):
+    let account: felt = accounts_by_index.read(index)
+    return(account)
+end
+# returns the total number of accounts (diggers)
+@view
+func accounts_total{
+        syscall_ptr: felt*, 
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr
+    }() -> (count: felt):
+    let count: felt = number_of_accounts.read()
+    return(count)
+end
+# returns the fee to dig a hole in wei
+@view
+func dig_fee{
+        syscall_ptr : felt*,
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }() -> (fee: felt):
+    let fee: felt = dig_fee_storage.read()
+    return (fee)
+end
+# returns the reward for digging a hole in RBIT
+@view
+func dig_reward{
+        syscall_ptr : felt*,
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }() -> (reward: felt):
+    let reward: felt = dig_reward_storage.read()
+    return (reward)
+end
+# returns the contract owner
+@view
+func owner{
+        syscall_ptr : felt*,
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }() -> (owner: felt):
+    let owner: felt = Ownable_get_owner()
+    return (owner)
+end
 # returns the name of the collection as a felt
 @view
 func name{
@@ -336,7 +604,7 @@ func decimals{
         pedersen_ptr : HashBuiltin*,
         range_check_ptr
     }() -> (decimals: felt):
-    let decimals: felt = 0
+    let decimals: felt = ERC20_decimals()
     return (decimals)
 end
 # returns the token balance for an account
@@ -348,141 +616,4 @@ func balanceOf{
     }(account: felt) -> (balance: Uint256):
     let (balance: Uint256) = ERC20_balanceOf(account)
     return (balance)
-end
-
-###########
-# Internal
-#########
-
-# recursive function makes the comment for a specific rabbit
-func _comment_creator{
-        syscall_ptr: felt*,
-        pedersen_ptr: HashBuiltin*,
-        range_check_ptr
-    }(start: felt, len: felt, comment: felt*):
-    if len == 0:
-        return ()
-    end
-    let (c) = comment_stack.read(start+len)
-    assert [comment] = c
-    _comment_creator(start=start, len=len - 1, comment=comment + 1)
-    return ()
-end
-# recursive: sets the comment stack for a rabbit's comment
-func _leave_rabbit{
-        syscall_ptr: felt*,
-        pedersen_ptr: HashBuiltin*,
-        range_check_ptr
-    }(comment_len: felt, comment: felt*):
-    if comment_len == 0:
-        return()
-    end
-    let displacement: felt = comment_stack_len.read()
-    let index = displacement + comment_len
-    comment_stack.write(index, [comment])
-    _leave_rabbit(comment_len - 1, comment + 1)
-    return()
-end
-
-#########
-# Public
-#######
-
-# Use this function to leave a rabbit in an existing hole
-# @notice Account will burn 1 RBIT
-# @param hole_index The hole to leave the rabbit in
-# @param comment_len The length of the comment array
-# @param comment An array of felts representing the rabbit's comment
-
-@external
-func leave_rabbit{
-        syscall_ptr: felt*,
-        pedersen_ptr: HashBuiltin*,
-        range_check_ptr
-    }(hole_index: felt, comment_len: felt, comment: felt*):
-    # NEED TO REQUIRE HOLE ALREADY DUG
-    # NEED TO BURN AN RBIT
-    alloc_locals
-    let current_hole_id: felt = current_hole_index.read()
-    let hole_diff: felt = current_hole_id - hole_index
-    # require hole not dug yet
-    with_attr error_message(
-            "Rabbitholes: Hole not dug yet"):
-        assert_lt(hole_index, current_hole_id + 1)
-    end
-    with_attr error_message(
-            "Rabbitholes: Invalid hole index"):
-        assert_nn(hole_diff)
-    end
-    with_attr error_message(
-            "Rabbitholes: Invalid hole index"):
-        assert_not_zero(hole_diff)
-    end
-    # sets rabbit comment(s) in comment stack
-    _leave_rabbit(comment_len, comment)
-    let account: felt = get_caller_address()
-    let id: felt = current_rabbit_index.read()
-    let timestamp: felt = get_block_timestamp()
-    let current_hole: Hole = hole_storage.read(hole_index)
-    let current_comment_index: felt = comment_stack_len.read()
-    let current_rabbits_in_hole: felt = current_hole.rabbit_count    
-    let current_rabbits_from_account: felt = account_rabbits_count.read(account)
-    # create and store new rabbit struct
-    rabbit_storage.write(id+1, Rabbit(leaver=account, comment_stack_start=current_comment_index, comment_stack_len=comment_len, timestamp=timestamp, hole_index=hole_index))
-    # increment rabbits in hole and store updated count
-    hole_storage.write(hole_index, Hole(digger=current_hole.digger, title=current_hole.title, timestamp=current_hole.timestamp, rabbit_count=current_rabbits_in_hole + 1))
-    # set rabbit in hole
-    rabbit_in_hole_storage.write(hole_index, current_rabbits_in_hole + 1, id + 1)
-    # set account's rabbit
-    account_rabbits.write(account, current_rabbits_from_account + 1, id + 1)
-    # increment number of rabbits from account
-    account_rabbits_count.write(account, current_rabbits_from_account + 1)
-    # increment comment stack len by comment_len
-    comment_stack_len.write(current_comment_index + comment_len)
-    # increment number of rabbits in contract
-    current_rabbit_index.write(id + 1)
-    # burn 1 rbit
-    let burn_amount: Uint256 = Uint256(1, 0)
-    ERC20_burn(account, burn_amount)
-    return()
-end
-
-
-# Use this function to dig a hole
-# @notice Account will pay the dig fee
-# @notice Account will be minted dig reward number of RBIT
-# @param title The felt representation for a hole's title
-@external
-func dig_hole{
-        syscall_ptr: felt*,
-        pedersen_ptr: HashBuiltin*,
-        range_check_ptr
-    }(title: felt):
-    alloc_locals
-    ## NEED TO CHARGE DIG FEE
-    let hole_index_lookup: felt = hole_indexes.read(title)
-    # require hole not dug yet
-    with_attr error_message(
-            "Rabbitholes: Hole already dug"):
-        assert hole_index_lookup = 0
-    end
-    let account: felt = get_caller_address()
-    let timestamp: felt = get_block_timestamp()
-    let id: felt = current_hole_index.read()
-    let current_holes_from_account: felt = account_holes_count.read(account)
-    # create and store new hole struct
-    hole_storage.write(id+1, Hole(digger=account, title=title, timestamp=timestamp, rabbit_count=0))
-    # set index for hole title
-    hole_indexes.write(title, id + 1)
-    # set account's holes
-    account_holes.write(account, current_holes_from_account + 1, id + 1)
-    # increment number of holes from account
-    account_holes_count.write(account, current_holes_from_account + 1)
-    # increment number of holes in contract
-    current_hole_index.write(id + 1)
-    # mint RBIT
-    let reward: felt = dig_reward_storage.read()
-    let amount: Uint256 = Uint256(reward, 0)
-    ERC20_mint(account, amount)
-    return()
 end
