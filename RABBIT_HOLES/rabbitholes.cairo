@@ -32,7 +32,7 @@ from openzeppelin.token.erc20.library import (
 
 ############################
 # @author DegenDeveloper.eth
-# May 3, 2022
+# May 5, 2022
 #
 # This contract allows accounts to start permanent discussion threads for any topic.
 # 
