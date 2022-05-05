@@ -30,7 +30,7 @@ from openzeppelin.token.erc20.library import (
     ERC20_initializer,
 )
 
-#########################################################################################
+############################
 # @author DegenDeveloper.eth
 # May 3, 2022
 #
@@ -38,41 +38,41 @@ from openzeppelin.token.erc20.library import (
 # 
 # Accounts can leave comments in existing discussion threads.
 # 
-# These discussion threads are called holes and the comments inside are called rabbits.
+# These discussion threads are `holes` and the comments inside are `rabbits`
 #
 # To dig a hole, an account must pay the DIG_FEE. In exchange for digging a hole,
 # the account will be minted `dig_reward` number of RBIT.
 #
 # To leave a rabbit in a hole, an account will burn 1 RBIT.
 #
-# This contract stores indexes for each hole, rabbit, and account for easier frontend parsing
-######################################################################
+# This contract stores indexes for each hole, rabbit, and account for easier frontend parsing.
+##############################################################################################
 
-###########
+##########
 # Structs 
-#########
+########
 
-#########################################################################
+###################################################
 # This struct stores data members for each hole dug
 # @param digger The account that dug the hole
 # @param title The felt representation for the hole's title ( < 32 char)
 # @param timestamp The time the hole was dug
 # @param rabbit_count The number of rabbits in the hole
-######################################################
+#######################################################
 struct Hole:
     member digger: felt
     member title: felt
     member timestamp: felt
     member rabbit_count: felt
 end
-############################################################################################
+######################################################
 # This struct stores data members for each rabbit left
 # @param leaver The account that left the rabbit
 # @param timestamp The time the rabbit was left
 # @param hole_index The index for the hole the rabbit belongs in
 # @param comment_stack_start The index the comment starts at in the comment_stack
 # @param comment_stack_len The number of comment indexes (felts) the comment fills
-###############################################################
+##################################################################################
 struct Rabbit:
     member leaver: felt
     member timestamp: felt
@@ -201,11 +201,6 @@ end
 ########
 # Owner 
 ######
-
-# add all owner functions here
-# set new owner
-# change dig fee
-# change dig reward
 
 # Sets the fee for digging a hole
 # @param amount A felt for the amount of wei to charge per dig
