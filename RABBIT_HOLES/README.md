@@ -8,7 +8,7 @@
 - These discussion threads are called `holes`
 - The messages in them are called `rabbits`
 
-## A Hole
+## Holes
 A hole is made of 4 members. Its `digger`, `title`, `timestamp`, and `rabbit_count`
 - The `digger` is the account that started the discussion thread
 - The `title` is a felt representation for the title
@@ -17,7 +17,7 @@ A hole is made of 4 members. Its `digger`, `title`, `timestamp`, and `rabbit_cou
 - The `rabbit count` is the number of rabbits/comments within the hole
   - This is used for indexing specific rabbits within a specific hole 
 
-## A Rabbit
+## Rabbits
 A rabbit is made of 5 members. Its `leaver`, `timestamp`, `hole_index`, `comment_stack_start`, and `comment_stack_len`
 - The `leaver` is the account that left the rabbit
 - The `timestamp` is the block timestamp when the rabbit was left
@@ -28,14 +28,14 @@ A rabbit is made of 5 members. Its `leaver`, `timestamp`, `hole_index`, `comment
 Because a rabbit's comment can be any length of characters, a comment is divided into its comment chunks (each a `felt`). The `comment_stack_start` for a rabbit tells where on the comment_stack the specific rabbit's comment starts, and the `comment_stack_len` tells how many comment chunks this rabbit's comment fills
 
 ## Technicals
-- The frontend application will handle `str` -> `felt` & `str` -> `felt *` conversions
+- The frontend application will handle `str` & `felt` conversions
 - An account will be minted RBIT when they dig a hole
 - Rabbits can only be left in already dug holes
-- When leaving a rabbit in a hole the caller will burn 1 RBIT
+- When leaving a rabbit in a hole the caller will burn 1 `RBIT`
 
 ## Future
 - Later there will be a fee for digging a hole
-  - This will reduce hole digging spam by introducing a pay wall
+  - This will discourage hole dig spamming by introducing a pay wall
 
 ## Currently
 - Testing the contract
