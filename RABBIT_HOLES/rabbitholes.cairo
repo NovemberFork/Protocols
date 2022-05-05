@@ -29,8 +29,6 @@ from contracts.token.ERC20.ERC20_base import (
 # @author DegenDeveloper.eth
 # May 3, 2022
 #
-#
-# 
 # This contract allows accounts to start permanent discussion threads for any topic.
 # Accounts can leave comments in existing discussion threads.
 # 
