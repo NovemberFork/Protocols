@@ -84,8 +84,8 @@ contract Grill is Ownable, ERC1155Holder {
   /// the contract instance for the tokens being staked
   Super1155 private immutable Parent;
 
-  bool private STAKING_ACTIVE = false;
-  bool private BAILED_OUT = false;
+  bool private STAKING_ACTIVE;
+  bool private BAILED_OUT;
 
   /// the max number of tokens to stake/unstake in a single txn
   uint256 private constant MAX_TXN = 20;
@@ -149,11 +149,13 @@ contract Grill is Ownable, ERC1155Holder {
   /**
    * Initializes the parent contract instance, the initial emission rate, and timestamps the deploy
    * @param _parentAddr The contract address to allow staking from
-   * @param _seconds The number of seconds a token must be staked for to earn 1 emission token
    */
-  constructor(address _parentAddr, uint256 _seconds) {
+  constructor(address _parentAddr) {
     Parent = Super1155(_parentAddr);
-    emissions[emChanges.current()] = Emission(_seconds, block.timestamp);
+    STAKING_ACTIVE = true;
+    BAILED_OUT = false;
+    uint256 secondsIn45Days = 3600 * 24 * 45;
+    emissions[emChanges.current()] = Emission(secondsIn45Days, block.timestamp);
   }
 
   /// ============ OWNER FUNCTIONS ============ ///
