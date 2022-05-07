@@ -1,6 +1,7 @@
 # RabbitHoles
 
 ## Idea:
+- Use cairo/starknet
 - Start permanent discussion threads for any topic
 - Store comments in these discussion threads
 
@@ -29,12 +30,12 @@ Because a rabbit's comment can be any length of characters, a comment is divided
 
 ## Technicals
 - The frontend application will handle `str` & `felt` conversions
-- An account will be minted RBIT when they dig a hole
+- An account will be minted a few RBIT when they dig a hole
 - Rabbits can only be left in already dug holes
 - When leaving a rabbit in a hole the caller will burn 1 `RBIT`
 
 ## Future
-- Later there will be a fee for digging a hole
+- Later there will be a fee for digging each `hole`
   - This will discourage hole dig spamming by introducing a pay wall
 
 ## Currently
