@@ -1,3 +1,3 @@
 # Protocols
 
-- Here are all published protocols from NovemberFork and their audits if available
+- Here is some of NovemberFork's (DegenDeveloper.eth's) code
